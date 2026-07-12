@@ -145,13 +145,10 @@ if not df.empty:
         fig = go.Figure()
         color_palette = pcolors.qualitative.Bold + pcolors.qualitative.Vivid
         
-        # -------------------------------------------------------------
-        # THE Y-AXIS OVERLAP FIX: Mathematical Layout Calculation
-        # -------------------------------------------------------------
+        # Mathematical Layout Calculation for Axes
         left_axes_indices = [i for i in range(len(selected_params)) if i % 2 == 0]
         right_axes_indices = [i for i in range(len(selected_params)) if i % 2 != 0]
         
-        # 8% of the screen width is reserved for every additional axis added
         shift_size = 0.08 
         domain_start = shift_size * max(0, len(left_axes_indices) - 1)
         domain_end = 1.0 - (shift_size * max(0, len(right_axes_indices) - 1))
@@ -159,7 +156,7 @@ if not df.empty:
         layout_updates = {
             "xaxis": dict(
                 title="Time", 
-                domain=[domain_start, domain_end], # Dynamically shrinks the grid to make room for axes
+                domain=[domain_start, domain_end], 
                 showgrid=True,
                 gridcolor='rgba(255,255,255,0.1)'
             ),
@@ -190,7 +187,6 @@ if not df.empty:
             y_min, y_max = y_limits[param]
             y_axis_key = f'yaxis{i+1}' if i > 0 else 'yaxis'
             
-            # Calculate the exact physical position for this axis (0.0 to 1.0)
             if is_left:
                 idx = left_axes_indices.index(i)
                 position = domain_start - (idx * shift_size)
@@ -204,9 +200,9 @@ if not df.empty:
                 "tickfont": dict(color=line_color, size=12),
                 "side": "left" if is_left else "right",
                 "position": position,
-                "anchor": "free", # Unlinks the axis from the edge so it obeys our calculated position
+                "anchor": "free",
                 "overlaying": "y" if i > 0 else None,
-                "showgrid": False # Turns off extra horizontal grid lines to prevent visual clutter
+                "showgrid": False
             }
             layout_updates[y_axis_key] = axis_config
             
@@ -214,7 +210,6 @@ if not df.empty:
 
         # Draw Annotations
         for ann in st.session_state.annotations:
-            # Check if the annotation is within the currently visible time window to prevent stretching
             if ann["time"] in df_filtered['Time'].values:
                 fig.add_vline(
                     x=ann["time"], 
@@ -227,16 +222,6 @@ if not df.empty:
 
         # Render Chart
         st.plotly_chart(fig, use_container_width=use_container_width)
-        
-        # ----------------- LIVE STATS SUMMARY -----------------
-        st.subheader("📊 Live Statistical Summary (Current Time Window)")
-        
-        # Calculate statistics strictly for the data visible on screen
-        stats_df = df_filtered[selected_params].describe().T[['min', 'max', 'mean']]
-        stats_df = stats_df.rename(columns={'min': 'Minimum', 'max': 'Maximum', 'mean': 'Average'})
-        
-        # Format numbers to 2 decimal places for cleaner presentation
-        st.dataframe(stats_df.style.format("{:.2f}"), use_container_width=True)
         
     else:
         st.info("Please select at least one parameter from the sidebar to view the trend.")
