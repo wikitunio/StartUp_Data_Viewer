@@ -50,7 +50,7 @@ if not df.empty:
 
     st.sidebar.divider()
     
-    # NEW: Advanced Excel Tools
+    # Advanced Excel Tools
     st.sidebar.header("📈 Advanced Excel Tools")
     show_markers = st.sidebar.checkbox("Show Data Points (Markers)", value=False)
     show_data_labels = st.sidebar.checkbox("Show Data Labels", value=False)
@@ -84,8 +84,10 @@ if not df.empty:
     # Session State Initialization
     if "start_time" not in st.session_state:
         st.session_state.start_time = min_time
+        
+    # NEW: Store annotations as a Pandas DataFrame for easy editing in the sidebar
     if "annotations" not in st.session_state:
-        st.session_state.annotations = []
+        st.session_state.annotations = pd.DataFrame(columns=["Time", "Event Description"])
 
     # Time bounds correction
     if st.session_state.start_time > valid_max_start:
@@ -112,7 +114,7 @@ if not df.empty:
         st.sidebar.info("Time window covers all data.")
         
     mask = (df['Elapsed_Minutes'] >= start_time) & (df['Elapsed_Minutes'] <= end_time)
-    df_filtered = df.loc[mask].copy() # Use copy to avoid SettingWithCopy warnings
+    df_filtered = df.loc[mask].copy()
 
     # Y-Axis Limits Configuration
     st.sidebar.subheader("Y-Axis Limits")
@@ -127,17 +129,34 @@ if not df.empty:
                 y_min, y_max = def_min, def_max
             y_limits[param] = [y_min, y_max]
 
-    # Event Annotations Tool
+    # ----------------- EVENT ANNOTATIONS TOOL -----------------
     st.sidebar.divider()
-    st.sidebar.header("📌 Add Event Annotation")
+    st.sidebar.header("📌 Event Annotations")
+    
     if not df_filtered.empty:
-        annot_time = st.sidebar.selectbox("Select Time", df_filtered['Time'].tolist())
-        annot_text = st.sidebar.text_input("Event Description (e.g., Valve Opened)")
-        if st.sidebar.button("Add Annotation Marker"):
-            if annot_text:
-                st.session_state.annotations.append({"time": annot_time, "text": annot_text})
-        if st.sidebar.button("Clear All Annotations"):
-            st.session_state.annotations = []
+        # Add new annotation
+        with st.sidebar.expander("➕ Add New Marker"):
+            annot_time = st.selectbox("Select Time", df_filtered['Time'].tolist())
+            annot_text = st.text_input("Event Description")
+            if st.button("Add to Timeline"):
+                if annot_text:
+                    new_row = pd.DataFrame([{"Time": annot_time, "Event Description": annot_text}])
+                    st.session_state.annotations = pd.concat([st.session_state.annotations, new_row], ignore_index=True)
+
+        # Toggle visibility
+        show_annots = st.sidebar.checkbox("👁️ Show Annotations on Graph", value=True)
+        
+        # Edit existing annotations using Streamlit's built-in data editor
+        if not st.session_state.annotations.empty:
+            st.sidebar.caption("Edit text, or select rows to delete:")
+            edited_annots = st.sidebar.data_editor(
+                st.session_state.annotations,
+                num_rows="dynamic", # Allows row deletion
+                use_container_width=True,
+                hide_index=True
+            )
+            # Save edits back to session state
+            st.session_state.annotations = edited_annots
 
     # ----------------- MAIN SCREEN -----------------
     if selected_params:
@@ -171,7 +190,7 @@ if not df.empty:
             "hovermode": "x unified",
             "height": graph_height,
             "template": "plotly_dark",
-            "margin": dict(t=50, l=10, r=10, b=50),
+            "margin": dict(t=70, l=10, r=10, b=50), # Increased top margin to fit annotation flags
             "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         }
         
@@ -183,7 +202,6 @@ if not df.empty:
             line_color = color_palette[i % len(color_palette)]
             is_left = (i % 2 == 0)
             
-            # Determine line drawing mode based on Excel tools selection
             plot_mode = 'lines'
             if show_markers and show_data_labels:
                 plot_mode = 'lines+markers+text'
@@ -196,7 +214,7 @@ if not df.empty:
                 x=df_filtered['Time'], 
                 y=df_filtered[param], 
                 mode=plot_mode, 
-                text=df_filtered[param].round(2) if show_data_labels else None, # Formats labels to 2 decimal places
+                text=df_filtered[param].round(2) if show_data_labels else None, 
                 textposition="top center",
                 name=param,
                 yaxis=y_axis_name,
@@ -204,9 +222,8 @@ if not df.empty:
                 marker=dict(size=7) if show_markers else None
             ))
             
-            # Calculate and append Linear Trendline
+            # Add Linear Trendline
             if show_trendlines and len(df_filtered) > 1:
-                # Filter out NaNs for clean mathematical fitting
                 y_vals = df_filtered[param].dropna()
                 x_idx = np.arange(len(df_filtered))[df_filtered[param].notna()]
                 
@@ -221,7 +238,7 @@ if not df.empty:
                         mode='lines',
                         name=f"{param} Trend",
                         yaxis=y_axis_name,
-                        line=dict(width=2, color=line_color, dash='dot'), # Dash pattern differentiates it from the main line
+                        line=dict(width=2, color=line_color, dash='dot'), 
                         showlegend=False,
                         hoverinfo='skip'
                     ))
@@ -250,17 +267,34 @@ if not df.empty:
             
         fig.update_layout(**layout_updates)
 
-        # Draw Annotations
-        for ann in st.session_state.annotations:
-            if ann["time"] in df_filtered['Time'].values:
-                fig.add_vline(
-                    x=ann["time"], 
-                    line_dash="dot", 
-                    line_color="white",
-                    annotation_text=f" 🚩 {ann['text']}", 
-                    annotation_position="top right",
-                    annotation_font=dict(color="white", size=14)
-                )
+        # -----------------------------------------------------------------
+        # BUG FIX: Safely draw annotations without using Plotly's math core
+        # -----------------------------------------------------------------
+        if show_annots and not st.session_state.annotations.empty:
+            for _, row in st.session_state.annotations.iterrows():
+                ann_time = row["Time"]
+                ann_text = row["Event Description"]
+                
+                if ann_time in df_filtered['Time'].values:
+                    # Draw the vertical line safely
+                    fig.add_vline(
+                        x=ann_time, 
+                        line_dash="dot", 
+                        line_color="white",
+                        opacity=0.7
+                    )
+                    # Draw the text label separately to prevent crashes
+                    fig.add_annotation(
+                        x=ann_time,
+                        y=1.05, # Pins the flag just above the main graph lines
+                        yref="paper",
+                        text=f"🚩 {ann_text}",
+                        showarrow=False,
+                        font=dict(color="white", size=13),
+                        bgcolor="rgba(40,40,40,0.8)", # Dark semi-transparent background
+                        bordercolor="white",
+                        borderwidth=1
+                    )
 
         # Render Chart
         st.plotly_chart(fig, use_container_width=use_container_width)
