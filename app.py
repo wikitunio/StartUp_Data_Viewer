@@ -177,7 +177,7 @@ if not df.empty:
         left_axes_indices = [i for i in range(len(selected_params)) if i % 2 == 0]
         right_axes_indices = [i for i in range(len(selected_params)) if i % 2 != 0]
         
-        shift_size = 0.06 
+        shift_size = 0.05 
         domain_start = shift_size * max(0, len(left_axes_indices) - 1)
         domain_end = 1.0 - (shift_size * max(0, len(right_axes_indices) - 1))
         
