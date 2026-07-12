@@ -255,8 +255,14 @@ if not df.empty:
             
             axis_config = {
                 "range": [float(y_min), float(y_max)],
-                "title": dict(text=param, font=dict(color=line_color, size=14)),
-                "tickfont": dict(color=line_color, size=12),
+                # The 'standoff' property controls the space between title and ticks. 
+                # Setting it to 0 or a very low value pulls them closer together.
+                "title": dict(
+                    text=param, 
+                    font=dict(color=line_color, size=12),
+                    standoff=0 
+                ),
+                "tickfont": dict(color=line_color, size=10),
                 "side": "left" if is_left else "right",
                 "position": position,
                 "anchor": "free",
