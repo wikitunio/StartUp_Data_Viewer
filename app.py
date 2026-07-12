@@ -124,7 +124,7 @@ if not df.empty:
         layout_updates = {
             "xaxis_title": "Time",
             "hovermode": "x unified",
-            "height": 650,
+            "height": 700, # Increased height slightly to accommodate multiple axes better
             "template": "plotly_dark",
             "margin": dict(t=30, l=50, r=50)
         }
@@ -147,23 +147,21 @@ if not df.empty:
             y_min, y_max = y_limits[param]
             y_axis_key = f'yaxis{i+1}' if i > 0 else 'yaxis'
             
-            # FIXED: Strict Plotly formatting for modern library versions
             axis_config = {
                 "range": [float(y_min), float(y_max)],
                 "fixedrange": False,
+                "title": dict(text=param, font=dict(color=line_color)),
                 "tickfont": dict(color=line_color)
             }
             
+            # THE FIX: Assigning a visible, shifting axis to every parameter selected
             if i == 0:
-                axis_config["title"] = dict(text=param, font=dict(color=line_color))
                 axis_config["side"] = "left"
-            elif i == 1:
-                axis_config["title"] = dict(text=param, font=dict(color=line_color))
-                axis_config["overlaying"] = "y"
-                axis_config["side"] = "right"
             else:
                 axis_config["overlaying"] = "y"
-                axis_config["showticklabels"] = False
+                # Alternate stacking axes on the left and right sides
+                axis_config["side"] = "left" if i % 2 == 0 else "right"
+                axis_config["autoshift"] = True # Automatically pushes axes outward so they never overlap
                 
             layout_updates[y_axis_key] = axis_config
         
