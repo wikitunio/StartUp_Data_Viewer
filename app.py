@@ -5,7 +5,7 @@ import numpy as np
 import plotly.colors as pcolors
 
 # Configure the page
-st.set_page_config(page_title="Startup Process Viewer", layout="wide")
+st.set_page_config(page_title="Startup Process Data Viewer", layout="wide")
 st.title("Startup Process Data Viewer")
 
 # 1. Optimized Data Loading & Caching
