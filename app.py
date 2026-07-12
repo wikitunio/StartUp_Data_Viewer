@@ -109,11 +109,14 @@ if not df.empty:
         for i, param in enumerate(selected_params):
             line_color = color_palette[i % len(color_palette)]
             mode = 'lines' + ('+markers' if show_markers else '') + ('+text' if show_data_labels else '')
-            fig.add_trace(go.Scatter(x=df_filtered['Time'], y=df_filtered[param], mode=mode, text=df_filtered[param].round(2) if show_data_labels else None, name=param, yaxis=f'y{i+1}' if i > 0 else 'y', line=dict(width=2.5, color=line_color)))
+            # FIX: Mapping index 0 to 'y', index 1+ to 'y2', 'y3', etc.
+            yaxis_key = 'y' if i == 0 else f'y{i+1}'
+            fig.add_trace(go.Scatter(x=df_filtered['Time'], y=df_filtered[param], mode=mode, text=df_filtered[param].round(2) if show_data_labels else None, name=param, yaxis=yaxis_key, line=dict(width=2.5, color=line_color)))
             
-            # Staggered Axis Calculation
+            # FIX: Mapping layout keys correctly to 'yaxis' for index 0, 'yaxis2' etc.
+            layout_key = 'yaxis' if i == 0 else f'yaxis{i+1}'
             pos = -(left_idxs.index(i) * shift_size) if i % 2 == 0 else 1 + (right_idxs.index(i) * shift_size)
-            layout_updates[f'yaxis{i+1}' if i > 0 else 'yaxis'] = dict(range=y_limits[param], title=dict(text=param, font=dict(color=line_color, size=11)), tickfont=dict(color=line_color, size=10), side="left" if i % 2 == 0 else "right", position=pos, anchor="free", overlaying="y", showgrid=False)
+            layout_updates[layout_key] = dict(range=y_limits[param], title=dict(text=param, font=dict(color=line_color, size=11)), tickfont=dict(color=line_color, size=10), side="left" if i % 2 == 0 else "right", position=pos, anchor="free", overlaying="y", showgrid=False)
             
         fig.update_layout(**layout_updates)
         if show_annots:
