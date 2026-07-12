@@ -81,7 +81,6 @@ if not df.empty:
     if "start_time" not in st.session_state:
         st.session_state.start_time = min_time
         
-    # FIX: Persistent Annotation Loading
     if "annotations" not in st.session_state:
         if os.path.exists("annotations.csv"):
             st.session_state.annotations = pd.read_csv("annotations.csv")
@@ -137,9 +136,8 @@ if not df.empty:
                 if annot_text:
                     new_row = pd.DataFrame([{"Time": annot_time, "Event Description": annot_text}])
                     st.session_state.annotations = pd.concat([st.session_state.annotations, new_row], ignore_index=True)
-                    # FIX: Save to CSV instantly
                     st.session_state.annotations.to_csv("annotations.csv", index=False)
-                    st.rerun() # Refreshes the app slightly to update the UI instantly
+                    st.rerun()
 
         show_annots = st.sidebar.checkbox("👁️ Show Annotations on Graph", value=True)
         
@@ -151,7 +149,6 @@ if not df.empty:
                 use_container_width=True,
                 hide_index=True
             )
-            # FIX: If the user deleted or edited a row, save the changes to the CSV
             if not edited_annots.equals(st.session_state.annotations):
                 st.session_state.annotations = edited_annots
                 st.session_state.annotations.to_csv("annotations.csv", index=False)
@@ -177,7 +174,10 @@ if not df.empty:
         left_axes_indices = [i for i in range(len(selected_params)) if i % 2 == 0]
         right_axes_indices = [i for i in range(len(selected_params)) if i % 2 != 0]
         
-        shift_size = 0.08 
+        # -------------------------------------------------------------
+        # NARROW AXIS FIX: Reduced shift_size to expand the graph area
+        # -------------------------------------------------------------
+        shift_size = 0.045 # Reduced from 0.08 for tighter axis packing
         domain_start = shift_size * max(0, len(left_axes_indices) - 1)
         domain_end = 1.0 - (shift_size * max(0, len(right_axes_indices) - 1))
         
@@ -191,7 +191,7 @@ if not df.empty:
             "hovermode": "x unified",
             "height": graph_height,
             "template": "plotly_dark",
-            "margin": dict(t=70, l=10, r=10, b=50), 
+            "margin": dict(t=70, l=30, r=30, b=50), # Expanded left/right margins slightly to fit the packed numbers
             "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         }
         
@@ -255,8 +255,8 @@ if not df.empty:
             
             axis_config = {
                 "range": [float(y_min), float(y_max)],
-                "title": dict(text=param, font=dict(color=line_color, size=14)),
-                "tickfont": dict(color=line_color, size=12),
+                "title": dict(text=param, font=dict(color=line_color, size=12)), # Reduced font size from 14
+                "tickfont": dict(color=line_color, size=11), # Reduced font size from 12
                 "side": "left" if is_left else "right",
                 "position": position,
                 "anchor": "free",
@@ -272,7 +272,6 @@ if not df.empty:
                 ann_time = row["Time"]
                 ann_text = row["Event Description"]
                 
-                # Convert the time to a string strictly for comparison to prevent type mismatch bugs
                 if str(ann_time) in df_filtered['Time'].astype(str).values:
                     fig.add_vline(
                         x=ann_time, 
