@@ -49,6 +49,14 @@ if not df.empty:
         graph_width = None
 
     st.sidebar.divider()
+    
+    # NEW: Advanced Excel Tools
+    st.sidebar.header("📈 Advanced Excel Tools")
+    show_markers = st.sidebar.checkbox("Show Data Points (Markers)", value=False)
+    show_data_labels = st.sidebar.checkbox("Show Data Labels", value=False)
+    show_trendlines = st.sidebar.checkbox("Show Linear Trend Lines", value=False)
+    
+    st.sidebar.divider()
     st.sidebar.header("⚙️ DCS Trend Settings")
     
     # Parameter Selection
@@ -104,7 +112,7 @@ if not df.empty:
         st.sidebar.info("Time window covers all data.")
         
     mask = (df['Elapsed_Minutes'] >= start_time) & (df['Elapsed_Minutes'] <= end_time)
-    df_filtered = df.loc[mask]
+    df_filtered = df.loc[mask].copy() # Use copy to avoid SettingWithCopy warnings
 
     # Y-Axis Limits Configuration
     st.sidebar.subheader("Y-Axis Limits")
@@ -175,14 +183,48 @@ if not df.empty:
             line_color = color_palette[i % len(color_palette)]
             is_left = (i % 2 == 0)
             
+            # Determine line drawing mode based on Excel tools selection
+            plot_mode = 'lines'
+            if show_markers and show_data_labels:
+                plot_mode = 'lines+markers+text'
+            elif show_markers:
+                plot_mode = 'lines+markers'
+            elif show_data_labels:
+                plot_mode = 'lines+text'
+            
             fig.add_trace(go.Scatter(
                 x=df_filtered['Time'], 
                 y=df_filtered[param], 
-                mode='lines', 
+                mode=plot_mode, 
+                text=df_filtered[param].round(2) if show_data_labels else None, # Formats labels to 2 decimal places
+                textposition="top center",
                 name=param,
                 yaxis=y_axis_name,
-                line=dict(width=2.5, color=line_color)
+                line=dict(width=2.5, color=line_color),
+                marker=dict(size=7) if show_markers else None
             ))
+            
+            # Calculate and append Linear Trendline
+            if show_trendlines and len(df_filtered) > 1:
+                # Filter out NaNs for clean mathematical fitting
+                y_vals = df_filtered[param].dropna()
+                x_idx = np.arange(len(df_filtered))[df_filtered[param].notna()]
+                
+                if len(y_vals) > 1:
+                    z = np.polyfit(x_idx, y_vals, 1)
+                    p = np.poly1d(z)
+                    trend_y = p(np.arange(len(df_filtered)))
+                    
+                    fig.add_trace(go.Scatter(
+                        x=df_filtered['Time'],
+                        y=trend_y,
+                        mode='lines',
+                        name=f"{param} Trend",
+                        yaxis=y_axis_name,
+                        line=dict(width=2, color=line_color, dash='dot'), # Dash pattern differentiates it from the main line
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
             
             y_min, y_max = y_limits[param]
             y_axis_key = f'yaxis{i+1}' if i > 0 else 'yaxis'
