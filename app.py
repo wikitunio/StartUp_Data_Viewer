@@ -44,11 +44,9 @@ if not df.empty:
     if "start_time" not in st.session_state:
         st.session_state.start_time = min_time
 
-    # Auto-adjust if window size changes and pushes limits out of bounds
     if st.session_state.start_time > max_time - window_size and window_size < len(df):
         st.session_state.start_time = max(min_time, max_time - window_size)
 
-    # Callbacks for the Prev/Next buttons
     def go_previous():
         st.session_state.start_time = max(min_time, st.session_state.start_time - window_size)
         
@@ -58,7 +56,6 @@ if not df.empty:
     # 4. Sidebar Slider Configuration
     if window_size < len(df):
         st.sidebar.subheader("Time Navigation")
-        # Notice key="start_time". This links the slider directly to st.session_state.start_time
         start_time = st.sidebar.slider(
             "Scroll Timeline", 
             min_value=min_time, 
@@ -89,7 +86,6 @@ if not df.empty:
     # 6. Plotting and Main Screen Buttons
     if selected_params:
         
-        # Add Pagination Buttons above the graph on the main screen
         if window_size < len(df):
             col1, spacer, col2 = st.columns([1, 4, 1])
             with col1:
@@ -97,29 +93,55 @@ if not df.empty:
             with col2:
                 st.button("Next ➡️", on_click=go_next, use_container_width=True, disabled=(st.session_state.start_time >= max_time - window_size))
         
-        # Build Chart
+        # Build Chart with Independent Axes
         fig = go.Figure()
-        for param in selected_params:
+        
+        layout_updates = {
+            "xaxis_title": "Time",
+            "hovermode": "x unified",
+            "height": 600,
+            "template": "plotly_dark",
+            "margin": dict(t=30)
+        }
+        
+        for i, param in enumerate(selected_params):
+            # Define the y-axis name for this specific trace (y, y2, y3, etc.)
+            y_axis_name = f'y{i+1}' if i > 0 else 'y'
+            
             fig.add_trace(go.Scatter(
                 x=df_filtered['Time'], 
                 y=df_filtered[param], 
                 mode='lines', 
-                name=param
+                name=param,
+                yaxis=y_axis_name
             ))
             
-        global_y_min = min([limits[0] for limits in y_limits.values()]) if y_limits else 0
-        global_y_max = max([limits[1] for limits in y_limits.values()]) if y_limits else 100
+            # Retrieve limits for this specific parameter
+            y_min, y_max = y_limits[param]
+            y_axis_key = f'yaxis{i+1}' if i > 0 else 'yaxis'
+            
+            # Configure the axis behavior
+            axis_config = {
+                "range": [y_min, y_max],
+                "fixedrange": False
+            }
+            
+            # Assign locations for the axes to prevent visual clutter
+            if i == 0:
+                axis_config["title"] = param
+                axis_config["side"] = "left"
+            elif i == 1:
+                axis_config["title"] = param
+                axis_config["overlaying"] = "y"
+                axis_config["side"] = "right"
+            else:
+                axis_config["overlaying"] = "y"
+                axis_config["showticklabels"] = False # Hides the numbers so they don't overlap, but keeps the scaling active
+                
+            layout_updates[y_axis_key] = axis_config
         
-        fig.update_layout(
-            xaxis_title="Time",
-            yaxis_title="Process Values",
-            yaxis_range=[global_y_min, global_y_max],
-            hovermode="x unified",
-            height=600,
-            template="plotly_dark",
-            margin=dict(t=30) # Reduces top margin space right below the buttons
-        )
-        
+        fig.update_layout(**layout_updates)
         st.plotly_chart(fig, use_container_width=True)
+        
     else:
         st.info("Please select at least one parameter from the sidebar to view the trend.")
