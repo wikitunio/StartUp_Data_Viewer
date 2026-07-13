@@ -4,18 +4,26 @@ import plotly.graph_objects as go
 import numpy as np
 import plotly.colors as pcolors
 import os
+import requests
+import io
 
 # Configure the page for a large DCS monitor layout
 st.set_page_config(page_title="Startup Process Viewer", layout="wide")
 st.title("Startup Process Data Viewer")
 
-# 1. Optimized Data Loading & Caching
-@st.cache_data(show_spinner=False)
+# 1. Cloud-Connected Data Loading & Caching (Refreshes every 120 seconds)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_data():
+    # URL modified to force direct download from SharePoint
+    url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAsjXPDGGRjQ447UjBdzsMXAasuyyIH1fvo8snGTRsSQYo?download=1"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    
     try:
-        # Check for the new file first, fallback to the old filename if needed
-        file_name = "Process_Data_StartUp_2.xlsx" if os.path.exists("Process_Data_StartUp_2.xlsx") else "Process_Data_StartUp.xlsx"
-        df = pd.read_excel(file_name)
+        response = requests.get(url, headers=headers)
+        response.raise_for_status() # Check for HTTP errors
+        excel_data = io.BytesIO(response.content)
+        
+        df = pd.read_excel(excel_data)
         
         df['Elapsed_Minutes'] = df.index
         if 'Time' not in df.columns:
@@ -35,7 +43,7 @@ def load_data():
                 
         return df, numeric_cols, limits_cache
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active and accessible.")
         return pd.DataFrame(), [], {}
 
 df, numeric_cols, limits_cache = load_data()
@@ -45,7 +53,6 @@ if not df.empty:
     st.sidebar.header("📺 Display Settings")
     
     graph_height = st.sidebar.slider("Graph Height (px)", min_value=500, max_value=1500, value=700, step=50)
-    # Renamed variable to avoid confusion with the deprecated Streamlit property
     maximize_width = st.sidebar.checkbox("Maximize Width to Screen", value=True)
     if not maximize_width:
         graph_width = st.sidebar.slider("Custom Width (px)", min_value=800, max_value=2500, value=1200, step=100)
@@ -136,7 +143,8 @@ if not df.empty:
         with st.sidebar.expander("➕ Add New Marker"):
             annot_time = st.selectbox("Select Time", df_filtered['Time'].tolist())
             annot_text = st.text_input("Event Description")
-            if st.button("Add to Timeline"):
+            # SEGFAULT FIX: Replaced use_container_width with width="stretch"
+            if st.button("Add to Timeline", width="stretch"):
                 if annot_text:
                     new_row = pd.DataFrame([{"Time": annot_time, "Event Description": annot_text}])
                     st.session_state.annotations = pd.concat([st.session_state.annotations, new_row], ignore_index=True)
@@ -147,20 +155,22 @@ if not df.empty:
         
         if not st.session_state.annotations.empty:
             st.sidebar.caption("Edit text, or select rows to delete:")
+            
+            # SEGFAULT FIX: Replaced use_container_width with width="stretch"
             edited_annots = st.sidebar.data_editor(
                 st.session_state.annotations,
                 num_rows="dynamic",
-                width="stretch", # CRITICAL FIX: Replaced use_container_width=True to prevent Streamlit segfault
+                width="stretch",
                 hide_index=True
             )
             
-            # Reset index ensures pandas doesn't misread row deletions during the equals check
             if not edited_annots.reset_index(drop=True).equals(st.session_state.annotations.reset_index(drop=True)):
                 st.session_state.annotations = edited_annots
                 st.session_state.annotations.to_csv("annotations.csv", index=False)
                 st.rerun()
                 
-            if st.sidebar.button("Clear All Annotations"):
+            # SEGFAULT FIX: Replaced use_container_width with width="stretch"
+            if st.sidebar.button("Clear All Annotations", width="stretch"):
                 st.session_state.annotations = pd.DataFrame(columns=["Time", "Event Description"])
                 st.session_state.annotations.to_csv("annotations.csv", index=False)
                 st.rerun()
@@ -170,9 +180,10 @@ if not df.empty:
         if valid_max_start > min_time:
             col1, spacer, col2 = st.columns([1, 8, 1])
             with col1:
-                # CRITICAL FIX: Replaced use_container_width=True with width="stretch"
+                # SEGFAULT FIX: Replaced use_container_width with width="stretch"
                 st.button("⬅️ Previous", on_click=go_previous, width="stretch", disabled=(st.session_state.start_time <= min_time))
             with col2:
+                # SEGFAULT FIX: Replaced use_container_width with width="stretch"
                 st.button("Next ➡️", on_click=go_next, width="stretch", disabled=(st.session_state.start_time >= valid_max_start))
         
         fig = go.Figure()
@@ -182,10 +193,8 @@ if not df.empty:
         right_axes_indices = [i for i in range(len(selected_params)) if i % 2 != 0]
         
         shift_size = 0.06 
-        
-        # PLOTLY CRASH FIX: Math limits added so selecting 10+ variables doesn't invert the domain screen width
-        domain_start = min(0.45, shift_size * max(0, len(left_axes_indices) - 1))
-        domain_end = max(0.55, 1.0 - (shift_size * max(0, len(right_axes_indices) - 1)))
+        domain_start = shift_size * max(0, len(left_axes_indices) - 1)
+        domain_end = 1.0 - (shift_size * max(0, len(right_axes_indices) - 1))
         
         layout_updates = {
             "xaxis": dict(
@@ -301,7 +310,7 @@ if not df.empty:
                         borderwidth=1
                     )
 
-        # CRITICAL FIX: Replaced use_container_width=True with width="stretch"
+        # SEGFAULT FIX: Replaced use_container_width with width="stretch"
         st.plotly_chart(fig, width="stretch" if maximize_width else "content")
         
     else:
