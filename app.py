@@ -13,7 +13,10 @@ st.title("Startup Process Data Viewer")
 @st.cache_data(show_spinner=False)
 def load_data():
     try:
-        df = pd.read_excel("Process_Data_StartUp.xlsx")
+        # Check for the new file first, fallback to the old filename if needed
+        file_name = "Process_Data_StartUp_2.xlsx" if os.path.exists("Process_Data_StartUp_2.xlsx") else "Process_Data_StartUp.xlsx"
+        df = pd.read_excel(file_name)
+        
         df['Elapsed_Minutes'] = df.index
         if 'Time' not in df.columns:
             df['Time'] = df['Elapsed_Minutes']
@@ -42,8 +45,9 @@ if not df.empty:
     st.sidebar.header("📺 Display Settings")
     
     graph_height = st.sidebar.slider("Graph Height (px)", min_value=500, max_value=1500, value=700, step=50)
-    use_container_width = st.sidebar.checkbox("Maximize Width to Screen", value=True)
-    if not use_container_width:
+    # Renamed variable to avoid confusion with the deprecated Streamlit property
+    maximize_width = st.sidebar.checkbox("Maximize Width to Screen", value=True)
+    if not maximize_width:
         graph_width = st.sidebar.slider("Custom Width (px)", min_value=800, max_value=2500, value=1200, step=100)
     else:
         graph_width = None
@@ -81,7 +85,6 @@ if not df.empty:
     if "start_time" not in st.session_state:
         st.session_state.start_time = min_time
         
-    # FIX: Persistent Annotation Loading
     if "annotations" not in st.session_state:
         if os.path.exists("annotations.csv"):
             st.session_state.annotations = pd.read_csv("annotations.csv")
@@ -137,9 +140,8 @@ if not df.empty:
                 if annot_text:
                     new_row = pd.DataFrame([{"Time": annot_time, "Event Description": annot_text}])
                     st.session_state.annotations = pd.concat([st.session_state.annotations, new_row], ignore_index=True)
-                    # FIX: Save to CSV instantly
                     st.session_state.annotations.to_csv("annotations.csv", index=False)
-                    st.rerun() # Refreshes the app slightly to update the UI instantly
+                    st.rerun()
 
         show_annots = st.sidebar.checkbox("👁️ Show Annotations on Graph", value=True)
         
@@ -148,11 +150,12 @@ if not df.empty:
             edited_annots = st.sidebar.data_editor(
                 st.session_state.annotations,
                 num_rows="dynamic",
-                use_container_width=True,
+                width="stretch", # CRITICAL FIX: Replaced use_container_width=True to prevent Streamlit segfault
                 hide_index=True
             )
-            # FIX: If the user deleted or edited a row, save the changes to the CSV
-            if not edited_annots.equals(st.session_state.annotations):
+            
+            # Reset index ensures pandas doesn't misread row deletions during the equals check
+            if not edited_annots.reset_index(drop=True).equals(st.session_state.annotations.reset_index(drop=True)):
                 st.session_state.annotations = edited_annots
                 st.session_state.annotations.to_csv("annotations.csv", index=False)
                 st.rerun()
@@ -167,9 +170,10 @@ if not df.empty:
         if valid_max_start > min_time:
             col1, spacer, col2 = st.columns([1, 8, 1])
             with col1:
-                st.button("⬅️ Previous", on_click=go_previous, use_container_width=True, disabled=(st.session_state.start_time <= min_time))
+                # CRITICAL FIX: Replaced use_container_width=True with width="stretch"
+                st.button("⬅️ Previous", on_click=go_previous, width="stretch", disabled=(st.session_state.start_time <= min_time))
             with col2:
-                st.button("Next ➡️", on_click=go_next, use_container_width=True, disabled=(st.session_state.start_time >= valid_max_start))
+                st.button("Next ➡️", on_click=go_next, width="stretch", disabled=(st.session_state.start_time >= valid_max_start))
         
         fig = go.Figure()
         color_palette = pcolors.qualitative.Bold + pcolors.qualitative.Vivid
@@ -177,9 +181,11 @@ if not df.empty:
         left_axes_indices = [i for i in range(len(selected_params)) if i % 2 == 0]
         right_axes_indices = [i for i in range(len(selected_params)) if i % 2 != 0]
         
-        shift_size = 0.04 
-        domain_start = shift_size * max(0, len(left_axes_indices) - 1)
-        domain_end = 1.0 - (shift_size * max(0, len(right_axes_indices) - 1))
+        shift_size = 0.06 
+        
+        # PLOTLY CRASH FIX: Math limits added so selecting 10+ variables doesn't invert the domain screen width
+        domain_start = min(0.45, shift_size * max(0, len(left_axes_indices) - 1))
+        domain_end = max(0.55, 1.0 - (shift_size * max(0, len(right_axes_indices) - 1)))
         
         layout_updates = {
             "xaxis": dict(
@@ -255,8 +261,6 @@ if not df.empty:
             
             axis_config = {
                 "range": [float(y_min), float(y_max)],
-                # The 'standoff' property controls the space between title and ticks. 
-                # Setting it to 0 or a very low value pulls them closer together.
                 "title": dict(
                     text=param, 
                     font=dict(color=line_color, size=12),
@@ -278,7 +282,6 @@ if not df.empty:
                 ann_time = row["Time"]
                 ann_text = row["Event Description"]
                 
-                # Convert the time to a string strictly for comparison to prevent type mismatch bugs
                 if str(ann_time) in df_filtered['Time'].astype(str).values:
                     fig.add_vline(
                         x=ann_time, 
@@ -298,7 +301,8 @@ if not df.empty:
                         borderwidth=1
                     )
 
-        st.plotly_chart(fig, use_container_width=use_container_width)
+        # CRITICAL FIX: Replaced use_container_width=True with width="stretch"
+        st.plotly_chart(fig, width="stretch" if maximize_width else "content")
         
     else:
         st.info("Please select at least one parameter from the sidebar to view the trend.")
